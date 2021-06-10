@@ -1,50 +1,7 @@
 import tensorflow as tf
 
 
-class SetEncoder(tf.keras.layers.Layer):
-    def __init__(self, encoder_dim, num_layers, trans_dim, num_heads):
-        super(SetEncoder, self).__init__()
-
-        self.trans_dim = trans_dim
-        self.num_layers = num_layers
-
-        self.conv1 = tf.keras.layers.Conv1D(encoder_dim, 1, kernel_initializer='glorot_uniform', use_bias=True)
-        self.conv2 = tf.keras.layers.Conv1D(encoder_dim, 1, kernel_initializer='glorot_uniform', use_bias=True)
-        self.conv3 = tf.keras.layers.Conv1D(trans_dim, 1, kernel_initializer='glorot_uniform', use_bias=True)
-
-        self.transformer = [TransformerLayer(trans_dim, num_heads) for _ in range(num_layers)]
-        self.transformer_pooling = PoolingMultiheadAttention(trans_dim, 1, 1)
-
-    def call(self, set, mask):
-        x = self.conv1(set)
-        x = tf.nn.leaky_relu(x)
-        x = self.conv2(x)
-        x = tf.nn.leaky_relu(x)
-        x = self.conv3(x)
-
-        for i in range(self.num_layers):
-            x = self.transformer[i](x, x, mask)
-
-        merged = self.transformer_pooling(x, mask)
-
-        return merged  # (batch_size, input_seq_len, d_model)
-
-
-class SetDecoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, trans_dim, num_heads):
-        super(SetDecoder, self).__init__()
-        self.embedding = tf.keras.layers.Conv1D(trans_dim, 1, kernel_initializer='glorot_uniform', use_bias=True,
-                                                bias_initializer=tf.constant_initializer(0.1))
-        self.transformer = [TransformerLayer(trans_dim, num_heads) for _ in range(num_layers)]
-
-    def call(self, initial_set, mask):
-        x = self.embedding(initial_set)
-
-        for i in range(self.num_layers):
-            x = self.transformer[i](x, x, mask)
-
-
-# implementation taken from https://www.tensorflow.org/tutorials/text/transformer
+# implementation based off https://www.tensorflow.org/tutorials/text/transformer
 class MultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads):
         super(MultiHeadAttention, self).__init__()
