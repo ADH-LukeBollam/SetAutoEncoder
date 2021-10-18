@@ -192,8 +192,8 @@ class MnistVariationalAutoencoder:
 
         return prior_loss
 
-    def reconstruction_loss(self, x, sampled_set, sizes):
-        set_dist = self.vae(x, sampled_set, sizes)
+    def reconstruction_loss(self, x, sampled_set, sizes, eval_mode=False):
+        set_dist = self.vae(x, sampled_set, sizes, eval_mode)
 
         log_prob_chamfer = prob_chamfer_distance(set_dist, x, sizes, self.dataset.max_num_elements)
         log_prob_chamfer = tf.reduce_mean(log_prob_chamfer)
@@ -215,7 +215,7 @@ class MnistVariationalAutoencoder:
     @tf.function
     def eval_vae_step(self, x, sizes):
         padded_samples, prior_loss = self.prior_loss(x, sizes)
-        pred_set, model_loss = self.reconstruction_loss(x, padded_samples, sizes)
+        pred_set, model_loss = self.reconstruction_loss(x, padded_samples, sizes, eval_mode=True)
         return prior_loss, model_loss, padded_samples, pred_set
 
     @tf.function

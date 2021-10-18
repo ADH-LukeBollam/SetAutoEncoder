@@ -7,8 +7,7 @@ from tensorflow_probability import distributions as tfd
 
 # modification of chamfer distance to calculate smallest log_prob between a set distribution and another set
 # log_prob instead of huber loss as a distance metric
-def prob_chamfer_distance(set_dists, set,
-                          sizes, max_size):
+def prob_chamfer_distance(set_dists, set, sizes, max_size):
 
     # compare each element with every other element
     probs = []
@@ -49,20 +48,26 @@ def prob_chamfer_distance(set_dists, set,
 
 
 if __name__ == '__main__':
+    logvar = 0.01
+
     # simple set to ensure math is checking out
     mean = tf.constant([[[0.5, 0.75], [0.1, 0.25], [0.35, 0.9]], [[0.4, 0.45], [0.5, 0.7], [0.8, 0.25]]], tf.float32)
 
-    dist = tfd.Independent(tfd.Normal(mean, 1), 1)
+    dist = tfd.Independent(tfd.Normal(mean, logvar), 1)
 
-    # slice off padding
     closest_prob = dist.log_prob(mean)
     expected = (tf.reduce_mean(input_tensor=closest_prob, axis=-1) + tf.reduce_mean(input_tensor=closest_prob, axis=-1))
 
     # same set but with elements swapped, to make sure the minimum permutation is being found
-    # inverted_mean = tf.constant([[[0.35, 0.9], [0.5, 0.75], [0.1, 0.25]], [[0.8, 0.25], [0.4, 0.45], [0.5, 0.7]]], tf.float32)
     inverted_mean = tf.reverse(mean, axis=[1])
 
+    # add some error to the means, ensure loss is higher
+    mean_e = mean + 0.1
+    dist_e = tfd.Independent(tfd.Normal(mean_e, logvar), 1)
+
+    best = prob_chamfer_distance(dist, mean, [3, 3], 3)
     actual = prob_chamfer_distance(dist, inverted_mean, [3, 3], 3)
+    worst = prob_chamfer_distance(dist_e, mean, [3, 3], 3)
 
     eq = tf.assert_equal(actual, expected)
 

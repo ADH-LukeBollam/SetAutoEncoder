@@ -94,12 +94,15 @@ class SetVariationalAutoEncoder(tf.keras.Model):
 
         self._size_predictor = SizePredictor(size_pred_width, max_set_size)
 
-    def call(self, initial_set, sampled_set, sizes):
+    def call(self, initial_set, sampled_set, sizes, eval_mode=False):
         # get the transformer mask []
         masked_values = tf.reshape(tf.cast(tf.math.logical_not(tf.sequence_mask(sizes, self.max_set_size)), tf.float32), [-1, 1, 1, self.max_set_size])
 
         # encode the input set
-        encoded = self._encoder(initial_set, masked_values)  # pooled: [batch_size, num_features]
+        if eval_mode:
+            encoded = self._encoder(initial_set, masked_values).mode()
+        else:
+            encoded = self._encoder(initial_set, masked_values).sample()  # pooled: [batch_size, num_features]
 
         # concat the encoded set vector onto each initial set element
         encoded_shaped = tf.expand_dims(encoded, 1)
@@ -108,9 +111,9 @@ class SetVariationalAutoEncoder(tf.keras.Model):
 
         pred_set_latent = self._decoder(sampled_elements_conditioned, masked_values)
 
-        pred_set = self._set_prediction_mean(pred_set_latent)
+        mean = self._set_prediction_mean(pred_set_latent)
 
-        dist = tfd.Normal(pred_set, 1.0)
+        dist = tfd.Normal(mean, 0.01)
         return tfd.Independent(dist, 1)
 
     def sample_prior(self, sizes):
