@@ -33,10 +33,13 @@ class SetEncoder(tf.keras.layers.Layer):
         self.transformer = [TransformerLayer(trans_dim, num_heads) for _ in range(num_layers)]
         self.transformer_pooling = PoolingMultiheadAttention(trans_dim, 1, 1)
 
-        _latent_prior = tfd.Independent(tfd.Normal(loc=tf.zeros(trans_dim), scale=1), reinterpreted_batch_ndims=1)
+        latent_dim = 64
+        _latent_prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1), reinterpreted_batch_ndims=1)
 
-        self.out_parameterization = tfkl.Dense(tfpl.MultivariateNormalTriL.params_size(trans_dim), activation=None)
-        self.out_dist = tfpl.MultivariateNormalTriL(trans_dim, activity_regularizer=tfpl.KLDivergenceRegularizer(_latent_prior, weight=0.0))
+        self.out_parameterization1 = tfkl.Dense(tfpl.IndependentNormal.params_size(latent_dim), activation='relu')
+        self.out_parameterization2 = tfkl.Dense(tfpl.IndependentNormal.params_size(latent_dim), activation=None)
+        self.out_dist = tfpl.IndependentNormal(latent_dim, activity_regularizer=tfpl.KLDivergenceRegularizer(_latent_prior, weight=1.0))
+        # self.out_dist = tfpl.IndependentNormal(latent_dim)
 
     def call(self, set, mask):
         x = self.pointwise_processing(set)
@@ -47,7 +50,8 @@ class SetEncoder(tf.keras.layers.Layer):
         merged = self.transformer_pooling(x, mask)
         merged = tf.reshape(merged, (-1, self.trans_dim))
 
-        dist_params = self.out_parameterization(merged)
+        dist_params = self.out_parameterization1(merged)
+        dist_params = self.out_parameterization2(dist_params)
         dist = self.out_dist(dist_params)
 
         return dist  # (batch_size, input_seq_len, d_model)
@@ -58,7 +62,7 @@ class SetDecoder(tf.keras.layers.Layer):
         super(SetDecoder, self).__init__()
         # process initial set to transformer dimension
         self.embedding = tf.keras.layers.Conv1D(trans_dim, 1, kernel_initializer='glorot_uniform', use_bias=True,
-                                                bias_initializer=tf.constant_initializer(0.1))\
+                                                bias_initializer=tf.constant_initializer(0.1))
 
         self.num_layers = num_layers
         self.transformer = [TransformerLayer(trans_dim, num_heads) for _ in range(num_layers)]
@@ -113,7 +117,7 @@ class SetVariationalAutoEncoder(tf.keras.Model):
 
         mean = self._set_prediction_mean(pred_set_latent)
 
-        dist = tfd.Normal(mean, 0.01)
+        dist = tfd.Normal(mean, 0.005)
         return tfd.Independent(dist, 1)
 
     def sample_prior(self, sizes):
@@ -129,7 +133,24 @@ class SetVariationalAutoEncoder(tf.keras.Model):
         return padded_samples
 
     def encode_set(self, initial_set, sizes):
-        return self._encoder(initial_set, sizes)
+        # get the transformer mask []
+        masked_values = tf.reshape(tf.cast(tf.math.logical_not(tf.sequence_mask(sizes, self.max_set_size)), tf.float32), [-1, 1, 1, self.max_set_size])
+
+        return self._encoder(initial_set, masked_values)
+
+    def decode_set(self, set_latent, initial_set, sizes):
+        masked_values = tf.reshape(tf.cast(tf.math.logical_not(tf.sequence_mask(sizes, self.max_set_size)), tf.float32), [-1, 1, 1, self.max_set_size])
+
+        encoded_shaped = tf.expand_dims(set_latent, 1)
+        encoded_shaped = tf.tile(encoded_shaped, [1, self.max_set_size, 1])
+        sampled_elements_conditioned = tf.concat([initial_set, encoded_shaped], 2)
+
+        pred_set_latent = self._decoder(sampled_elements_conditioned, masked_values)
+
+        mean = self._set_prediction_mean(pred_set_latent)
+
+        dist = tfd.Normal(mean, 0.005)
+        return tfd.Independent(dist, 1)
 
     def predict_size(self, embedding):
         sizes = self._size_predictor(embedding)

@@ -28,7 +28,7 @@ def set_config():
     config.reconstruction_learning_rate = 0.001
     config.prior_learning_rate = 0.1
     config.set_pred_learning_rate = 0.0001
-    config.weight_decay = 0.0001
+    config.weight_decay = 0.0000
     config.log_every = 500
 
     # training config

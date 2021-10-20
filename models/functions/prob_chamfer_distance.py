@@ -48,7 +48,7 @@ def prob_chamfer_distance(set_dists, set, sizes, max_size):
 
 
 if __name__ == '__main__':
-    logvar = 0.01
+    logvar = 0.005
 
     # simple set to ensure math is checking out
     mean = tf.constant([[[0.5, 0.75], [0.1, 0.25], [0.35, 0.9]], [[0.4, 0.45], [0.5, 0.7], [0.8, 0.25]]], tf.float32)
