@@ -2,6 +2,9 @@ A Tensorflow 2.5 implementation of the papers:
 [TSPN](https://arxiv.org/abs/2006.16841v2) - Adam R Kosiorek, Hyunjik Kim, Danilo J Rezende  
 [Set Transformer](https://arxiv.org/abs/1810.00825) - Juho Lee, Yoonho Lee, Jungtaek Kim, Adam R. Kosiorek, Seungjin Choi, Yee Whye Teh
 
+Blog post:
+https://lukebolly.github.io/posts/2021/10/set-autoencoders/
+
 <img src="interpolation.gif" alt="Image not found" width="400"/>
 
 To train the Autoencoder, run `mnist_ae.py`
