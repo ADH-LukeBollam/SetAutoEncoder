@@ -1,4 +1,4 @@
-A Tensorflow 2.5 implementation of the papers:
+A Tensorflow 2.5 implementation of the papers:  
 [TSPN](https://arxiv.org/abs/2006.16841v2) - Adam R Kosiorek, Hyunjik Kim, Danilo J Rezende  
 [Set Transformer](https://arxiv.org/abs/1810.00825) - Juho Lee, Yoonho Lee, Jungtaek Kim, Adam R. Kosiorek, Seungjin Choi, Yee Whye Teh
 
