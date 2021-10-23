@@ -24,7 +24,10 @@ def encode_gif(frames, fps):
 
 
 def create_xy_gif(sets, set_size):
-    img_res = 256
+    img_res = 320
+
+    goal_x = 640
+    x_pad = (int)((640 - 320) / 2)
 
     frames = []
     for s in sets:
@@ -37,6 +40,9 @@ def create_xy_gif(sets, set_size):
             point_x = int(set_y[u] * img_res)
             point_y = int(set_x[u] * img_res)
             cv.circle(frame, (point_x, point_y), 6, (255.0,), -1, lineType=cv.LINE_AA)
+
+        pad = np.zeros((img_res, x_pad, 1))
+        frame = np.concatenate([pad, frame, pad], axis=1)
         frames.append(frame)
 
     frames = np.stack(frames, axis=0)
