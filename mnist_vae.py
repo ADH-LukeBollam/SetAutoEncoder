@@ -1,6 +1,7 @@
 import tensorflow as tf
 from models.optimisers.one_cycle_adam import OneCycleAdamW
 from models.set_vae import SetVariationalAutoEncoder
+from models.set_vae_v2 import SetVariationalAutoEncoderV2
 from tools import AttrDict, Every
 from datasets.mnist_set import MnistSet
 from models.functions.prob_chamfer_distance import prob_chamfer_distance
@@ -27,13 +28,13 @@ def set_config():
     config.pad_value = -1
     config.reconstruction_learning_rate = 0.001
     config.prior_learning_rate = 0.1
-    config.set_pred_learning_rate = 0.0001
+    config.size_pred_learning_rate = 0.0001
     config.weight_decay = 0.0001
     config.log_every = 500
 
     # training config
     config.num_epochs = 100
-    config.batch_size = 32
+    config.batch_size = 28
     return config
 
 
@@ -46,13 +47,13 @@ class MnistVariationalAutoencoder:
         self.should_log = Every(self._c.log_every)
         self.dataset = dataset
 
-        self.vae = SetVariationalAutoEncoder(self._c.encoder_latent, self._c.trans_layers, self._c.trans_attn_size, self._c.trans_num_heads,
+        self.vae = SetVariationalAutoEncoderV2(self._c.encoder_latent, self._c.trans_layers, self._c.trans_attn_size, self._c.trans_num_heads,
                                  self.dataset.element_size, self._c.size_pred_width, self._c.pad_value, self.dataset.max_num_elements)
         self.vae.compile()
 
         self.reconstruction_optimiser = OneCycleAdamW(self._c.reconstruction_learning_rate, config.weight_decay, 200000)
         self.prior_optimiser = tf.keras.optimizers.Adam(self._c.prior_learning_rate)
-        self.size_pred_optimiser = tf.keras.optimizers.Adam(self._c.set_pred_learning_rate)
+        self.size_pred_optimiser = tf.keras.optimizers.Adam(self._c.size_pred_learning_rate)
 
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         train_log_dir = 'logs/metrics/vae/' + current_time
