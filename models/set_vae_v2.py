@@ -52,9 +52,9 @@ class SetEncoder(tf.keras.layers.Layer):
 
         dist_params = self.out_parameterization1(merged)
         dist_params = self.out_parameterization2(dist_params)
-        # dist = self.out_dist(dist_params)
+        dist = self.out_dist(dist_params)
 
-        return dist_params  # (batch_size, input_seq_len, d_model)
+        return dist  # (batch_size, input_seq_len, d_model)
 
 
 class SetDecoder(tf.keras.layers.Layer):
@@ -103,11 +103,10 @@ class SetVariationalAutoEncoderV2(tf.keras.Model):
         masked_values = tf.reshape(tf.cast(tf.math.logical_not(tf.sequence_mask(sizes, self.max_set_size)), tf.float32), [-1, 1, 1, self.max_set_size])
 
         # encode the input set
-        # if eval_mode:
-        #     encoded = self._encoder(initial_set, masked_values).mode()
-        # else:
-        #     encoded = self._encoder(initial_set, masked_values).sample()  # pooled: [batch_size, num_features]
-        encoded = self._encoder(initial_set, masked_values)
+        if eval_mode:
+            encoded = self._encoder(initial_set, masked_values).mode()
+        else:
+            encoded = self._encoder(initial_set, masked_values).sample()  # pooled: [batch_size, num_features]
 
         # concat the encoded set vector onto each initial set element
         encoded_shaped = tf.expand_dims(encoded, 1)
