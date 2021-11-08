@@ -1,12 +1,13 @@
 import tensorflow as tf
 
 from datasets.random_point_set import RandomPointSet
+from models.functions.tf_hungarian_algorithm import get_hungarian
 from models.optimisers.one_cycle_adam import OneCycleAdamW
 from models.set_vae import SetVariationalAutoEncoder
 from models.set_vae_v2 import SetVariationalAutoEncoderV2
 from tools import AttrDict, Every
 from datasets.mnist_set import MnistSet
-from models.functions.prob_chamfer_distance import prob_chamfer_distance
+# from models.functions.prob_chamfer_distance import prob_chamfer_distance
 import datetime
 from visualisation import mnist_example
 import math
@@ -28,11 +29,11 @@ def set_config():
     config.size_pred_width = 128
     config.train_steps = 100
     config.pad_value = -1
-    config.reconstruction_learning_rate = 0.00001
+    config.reconstruction_learning_rate = 0.001
     config.prior_learning_rate = 0.1
-    config.set_pred_learning_rate = 0.0001
+    config.size_pred_learning_rate = 0.0001
     config.weight_decay = 0.0
-    config.log_every = 500
+    config.log_every = 5000
 
     # training config
     config.num_epochs = 60
@@ -91,13 +92,13 @@ class RandomPointVAE:
 
         step = 0
         # start by training our prior
-        print('prior training')
-        for (images, sets, sizes, labels) in train_ds.take(100):
-            train_prior_loss = self.train_prior_step(sets, sizes)
-            step += 1
-
-            with self.summary_writer.as_default():
-                tf.summary.scalar('train/prior loss', train_prior_loss, step=step)
+        # print('prior training')
+        # for (images, sets, sizes, labels) in train_ds.take(100):
+        #     train_prior_loss = self.train_prior_step(sets, sizes)
+        #     step += 1
+        #
+        #     with self.summary_writer.as_default():
+        #         tf.summary.scalar('train/prior loss', train_prior_loss, step=step)
 
         step = 0
         # once prior has stabilised, begin training autoencoder
@@ -168,42 +169,41 @@ class RandomPointVAE:
             with self.summary_writer.as_default():
                 tf.summary.scalar('val/size predictor RMSE', rmse, step=step)
 
-    def prior_loss(self, initial_set, sizes):
-        sampled_set = self.vae.sample_prior(sizes)
+    # def prior_loss(self, initial_set, sizes):
+    #     sampled_set = self.vae.sample_prior(sizes)
+    #
+    #     # exclude padded values and flatten our batch of sets
+    #     unpadded_indices = tf.where(tf.not_equal(initial_set[:, :, 0], self._c.pad_value))
+    #     initial_set_flattened = tf.cast(tf.gather_nd(initial_set, unpadded_indices), tf.float32)
+    #
+    #     negloglik = lambda y, p_y: -p_y.log_prob(y)
+    #     prior_error = negloglik(initial_set_flattened, sampled_set)
+    #     prior_loss = tf.reduce_mean(prior_error)
+    #
+    #     samples_ragged = tf.RaggedTensor.from_row_lengths(sampled_set, sizes)
+    #     padded_samples = samples_ragged.to_tensor(default_value=self._c.pad_value,
+    #                                               shape=[sizes.shape[0], self.max_set_size, self.element_size])
+    #
+    #     return padded_samples, prior_loss
 
-        # exclude padded values and flatten our batch of sets
-        unpadded_indices = tf.where(tf.not_equal(initial_set[:, :, 0], self._c.pad_value))
-        initial_set_flattened = tf.cast(tf.gather_nd(initial_set, unpadded_indices), tf.float32)
-
-        negloglik = lambda y, p_y: -p_y.log_prob(y)
-        prior_error = negloglik(initial_set_flattened, sampled_set)
-        prior_loss = tf.reduce_mean(prior_error)
-
-        samples_ragged = tf.RaggedTensor.from_row_lengths(sampled_set, sizes)
-        padded_samples = samples_ragged.to_tensor(default_value=self._c.pad_value,
-                                                  shape=[sizes.shape[0], self.max_set_size, self.element_size])
-
-        return padded_samples, prior_loss
-
-    def train_prior_step(self, x, sizes):
-        with tf.GradientTape() as prior_tape:
-            sampled_set, prior_loss = self.prior_loss(x, sizes)
-
-        prior_trainables = self.vae.get_prior_weights()
-        prior_grads = prior_tape.gradient(prior_loss, prior_trainables)
-        self.prior_optimiser.apply_gradients(zip(prior_grads, prior_trainables))
-
-        return prior_loss
+    # def train_prior_step(self, x, sizes):
+    #     with tf.GradientTape() as prior_tape:
+    #         sampled_set, prior_loss = self.prior_loss(x, sizes)
+    #
+    #     prior_trainables = self.vae.get_prior_weights()
+    #     prior_grads = prior_tape.gradient(prior_loss, prior_trainables)
+    #     self.prior_optimiser.apply_gradients(zip(prior_grads, prior_trainables))
+    #
+    #     return prior_loss
 
     def reconstruction_loss(self, x, sampled_set, sizes, eval_mode=False):
         set_dist = self.vae(x, sampled_set, sizes, eval_mode)
 
-        log_prob_chamfer = prob_chamfer_distance(set_dist, x, sizes, self.dataset.max_num_elements)
-        log_prob_chamfer = tf.reduce_mean(log_prob_chamfer)
+        losses = get_hungarian(set_dist, x, sizes)
+        mean_loss = tf.reduce_mean(losses)
 
-        return set_dist.mode(), -log_prob_chamfer
+        return set_dist, mean_loss
 
-    @tf.function
     def train_vae_step(self, initial_set, sizes):
         sampled_set = self.vae.sample_prior_batch(sizes)
 
@@ -215,11 +215,11 @@ class RandomPointVAE:
         self.reconstruction_optimiser.apply_gradients(zip(model_grads, model_trainables))
         return model_loss
 
-    @tf.function
     def eval_vae_step(self, x, sizes):
-        padded_samples, prior_loss = self.prior_loss(x, sizes)
+        # padded_samples, prior_loss = self.prior_loss(x, sizes)
+        padded_samples = self.vae.sample_prior_batch(sizes)
         pred_set, model_loss = self.reconstruction_loss(x, padded_samples, sizes, eval_mode=True)
-        return prior_loss, model_loss, padded_samples, pred_set
+        return 0.0, model_loss, padded_samples, pred_set
 
     @tf.function
     def size_predictor_loss(self, embedded_sets, sizes):

@@ -8,9 +8,9 @@ tfkl = tf.keras.layers
 tfb = tfp.bijectors
 
 
-class SetPrior(tf.keras.Model):
+class StochasticSetPrior(tf.keras.Model):
     def __init__(self, event_size, *args, **kwargs):
-        super(SetPrior, self).__init__()
+        super(StochasticSetPrior, self).__init__()
         self.event_size = event_size
         mvnd_input_size = 2         # size 2 because loc and scale inputs
 
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     event_size = 2
     # set_sizes = [109, 85, 73, 100, 124, 151]
 
-    prior = SetPrior(event_size)
+    prior = StochasticSetPrior(event_size)
     distribution = prior(batch_size)
     sample = distribution.sample()
 

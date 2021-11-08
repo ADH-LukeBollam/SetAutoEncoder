@@ -1,5 +1,5 @@
 import tensorflow as tf
-from models.set_prior import SetPrior
+from models.stochastic_set_prior import StochasticSetPrior
 from models.size_predictor import SizePredictor
 from models.transformer_layers import TransformerLayer, PoolingMultiheadAttention
 import tensorflow_probability as tfp
@@ -39,7 +39,6 @@ class SetEncoder(tf.keras.layers.Layer):
         self.out_parameterization1 = tfkl.Dense(tfpl.IndependentNormal.params_size(latent_dim), activation='relu')
         self.out_parameterization2 = tfkl.Dense(tfpl.IndependentNormal.params_size(latent_dim), activation=None)
         self.out_dist = tfpl.IndependentNormal(latent_dim, activity_regularizer=tfpl.KLDivergenceRegularizer(_latent_prior, weight=1.0))
-        # self.out_dist = tfpl.IndependentNormal(latent_dim)
 
     def call(self, set, mask):
         x = self.pointwise_processing(set)
@@ -85,7 +84,7 @@ class SetVariationalAutoEncoder(tf.keras.Model):
         self.max_set_size = max_set_size
         self.num_element_features = num_element_features
 
-        self._prior = SetPrior(num_element_features)
+        self._prior = StochasticSetPrior(num_element_features)
 
         self._encoder = SetEncoder(encoder_latent, transformer_layers, transformer_dim, transformer_num_heads)
 

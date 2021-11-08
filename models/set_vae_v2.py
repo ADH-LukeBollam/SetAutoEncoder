@@ -1,5 +1,7 @@
 import tensorflow as tf
-from models.set_prior import SetPrior
+
+from models.deterministic_set_prior import DeterministicSetPrior
+from models.stochastic_set_prior import StochasticSetPrior
 from models.size_predictor import SizePredictor
 from models.transformer_layers import TransformerLayer, PoolingMultiheadAttention
 import tensorflow_probability as tfp
@@ -85,7 +87,7 @@ class SetVariationalAutoEncoderV2(tf.keras.Model):
         self.max_set_size = max_set_size
         self.num_element_features = num_element_features
 
-        self._prior = SetPrior(num_element_features)
+        self._prior = DeterministicSetPrior(num_element_features, self.max_set_size)
 
         self._encoder = SetEncoder(encoder_latent, transformer_layers, transformer_dim, transformer_num_heads)
 
@@ -98,6 +100,7 @@ class SetVariationalAutoEncoderV2(tf.keras.Model):
 
         self._size_predictor = SizePredictor(size_pred_width, max_set_size)
 
+    @tf.function
     def call(self, initial_set, sampled_set, sizes, eval_mode=False):
         # get the transformer mask []
         masked_values = tf.reshape(tf.cast(tf.math.logical_not(tf.sequence_mask(sizes, self.max_set_size)), tf.float32), [-1, 1, 1, self.max_set_size])
@@ -111,26 +114,14 @@ class SetVariationalAutoEncoderV2(tf.keras.Model):
         # concat the encoded set vector onto each initial set element
         encoded_shaped = tf.expand_dims(encoded, 1)
         conditioning = tf.tile(encoded_shaped, [1, self.max_set_size, 1])
-        # sampled_elements_conditioned = tf.concat([sampled_set, encoded_shaped], 2)
 
         pred_set_latent = self._decoder(sampled_set, masked_values, conditioning)
 
-        mean = self._set_prediction_mean(pred_set_latent)
-
-        dist = tfd.Normal(mean, 0.005)
-        return tfd.Independent(dist, 1)
-
-    def sample_prior(self, sizes):
-        total_elements = tf.reduce_sum(sizes)
-        sampled_elements = self._prior(total_elements)  # [batch_size, max_set_size, num_features]
-        return sampled_elements
+        pred = self._set_prediction_mean(pred_set_latent)
+        return pred
 
     def sample_prior_batch(self, sizes):
-        sampled_elements = self.sample_prior(sizes)
-        samples_ragged = tf.RaggedTensor.from_row_lengths(sampled_elements, sizes)
-        padded_samples = samples_ragged.to_tensor(default_value=self.pad_value,
-                                                  shape=[sizes.shape[0], self.max_set_size, self.num_element_features])
-        return padded_samples
+        return self._prior(sizes)
 
     def encode_set(self, initial_set, sizes):
         # get the transformer mask []

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from models.set_prior import SetPrior
+from models.stochastic_set_prior import StochasticSetPrior
 from models.size_predictor import SizePredictor
 from models.transformer_layers import TransformerLayer, PoolingMultiheadAttention
 
@@ -67,7 +67,7 @@ class SetAutoEncoder(tf.keras.Model):
         self.max_set_size = max_set_size
         self.num_element_features = num_element_features
 
-        self._prior = SetPrior(num_element_features)
+        self._prior = StochasticSetPrior(num_element_features)
 
         self._encoder = SetEncoder(encoder_latent, transformer_layers, transformer_dim, transformer_num_heads)
         self._decoder = SetDecoder(transformer_layers, transformer_dim, transformer_num_heads)
