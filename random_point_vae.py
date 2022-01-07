@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 from datasets.random_point_set import RandomPointSet
+from models.functions.chamfer_distance import chamfer_distance_smoothed
 from models.functions.tf_hungarian_algorithm import get_hungarian
 from models.optimisers.one_cycle_adam import OneCycleAdamW
 from models.set_vae import SetVariationalAutoEncoder
@@ -15,6 +16,7 @@ import argparse
 import os
 import decimal
 from re import sub
+import tensorflow_addons as tfa
 
 
 def set_config():
@@ -29,11 +31,11 @@ def set_config():
     config.size_pred_width = 128
     config.train_steps = 100
     config.pad_value = -1
-    config.reconstruction_learning_rate = 0.001
+    config.reconstruction_learning_rate = 0.00001
     config.prior_learning_rate = 0.1
     config.size_pred_learning_rate = 0.0001
     config.weight_decay = 0.0
-    config.log_every = 5000
+    config.log_every = 2000
 
     # training config
     config.num_epochs = 60
@@ -54,8 +56,14 @@ class RandomPointVAE:
                                  self.dataset.element_size, self._c.size_pred_width, self._c.pad_value, self.dataset.max_num_elements)
         self.vae.compile()
 
-        self.reconstruction_optimiser = OneCycleAdamW(self._c.reconstruction_learning_rate, config.weight_decay, 200000)
-        self.prior_optimiser = tf.keras.optimizers.Adam(self._c.prior_learning_rate)
+        total_steps = 80000
+
+        # RANGER optimiser
+        radam = tfa.optimizers.RectifiedAdam(learning_rate=self._c.reconstruction_learning_rate,
+                                             total_steps=total_steps,
+                                             warmup_proportion=0.025, min_lr=self._c.reconstruction_learning_rate)
+        self.reconstruction_optimiser = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
+
         self.size_pred_optimiser = tf.keras.optimizers.Adam(self._c.size_pred_learning_rate)
 
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -91,17 +99,6 @@ class RandomPointVAE:
         val_ds = self.dataset.get_val_set().batch(self._c.batch_size)
 
         step = 0
-        # start by training our prior
-        # print('prior training')
-        # for (images, sets, sizes, labels) in train_ds.take(100):
-        #     train_prior_loss = self.train_prior_step(sets, sizes)
-        #     step += 1
-        #
-        #     with self.summary_writer.as_default():
-        #         tf.summary.scalar('train/prior loss', train_prior_loss, step=step)
-
-        step = 0
-        # once prior has stabilised, begin training autoencoder
         for epoch in range(self._c.num_epochs):
             print('autoencoder training epoch: ' + str(epoch))
             for train_step, (images, sets, sizes, labels) in enumerate(train_ds):
@@ -199,7 +196,7 @@ class RandomPointVAE:
     def reconstruction_loss(self, x, sampled_set, sizes, eval_mode=False):
         set_dist = self.vae(x, sampled_set, sizes, eval_mode)
 
-        losses = get_hungarian(set_dist, x, sizes)
+        losses = chamfer_distance_smoothed(set_dist, x, sizes)
         mean_loss = tf.reduce_mean(losses)
 
         return set_dist, mean_loss

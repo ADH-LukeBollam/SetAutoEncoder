@@ -7,26 +7,25 @@ from datasets.mnist_set import MnistSet
 
 # modification of standard chamfer distance, using huber loss instead of squared distance
 # same loss used in DSPN, not sure about TSPN
-def chamfer_distance_smoothed(point_set_a, point_set_b, sizes, name=None):
-    with tf.compat.v1.name_scope(name, "chamfer_distance_evaluate", [point_set_a, point_set_b]):
-        a = tf.expand_dims(point_set_a, axis=-2)
-        b = tf.expand_dims(point_set_b, axis=-3)
+def chamfer_distance_smoothed(point_set_a, point_set_b, sizes):
+    a = tf.expand_dims(point_set_a, axis=-2)
+    b = tf.expand_dims(point_set_b, axis=-3)
 
-        largest_unpadded_dim = tf.reduce_max(sizes)
-        row_sizes = tf.repeat(sizes, sizes)
-        a = a[:, :largest_unpadded_dim, :largest_unpadded_dim, :]
-        b = b[:, :largest_unpadded_dim, :largest_unpadded_dim, :]
-        a = tf.RaggedTensor.from_tensor(tf.repeat(a, largest_unpadded_dim, -2), lengths=(sizes, row_sizes))
-        b = tf.RaggedTensor.from_tensor(tf.repeat(b, largest_unpadded_dim, -3), lengths=(sizes, row_sizes))
+    largest_unpadded_dim = tf.reduce_max(sizes)
+    row_sizes = tf.repeat(sizes, sizes)
+    a = a[:, :largest_unpadded_dim, :largest_unpadded_dim, :]
+    b = b[:, :largest_unpadded_dim, :largest_unpadded_dim, :]
+    a = tf.RaggedTensor.from_tensor(tf.repeat(a, largest_unpadded_dim, -2), lengths=(sizes, row_sizes))
+    b = tf.RaggedTensor.from_tensor(tf.repeat(b, largest_unpadded_dim, -3), lengths=(sizes, row_sizes))
 
-        square_distances = tf.keras.losses.huber(a, b)
+    square_distances = tf.keras.losses.huber(a, b)
 
-        minimum_square_distance_a_to_b = tf.reduce_min(input_tensor=square_distances, axis=-1)
-        minimum_square_distance_b_to_a = tf.reduce_min(input_tensor=square_distances, axis=-2)
+    minimum_square_distance_a_to_b = tf.reduce_min(input_tensor=square_distances, axis=-1)
+    minimum_square_distance_b_to_a = tf.reduce_min(input_tensor=square_distances, axis=-2)
 
-        setwise_distance = (tf.reduce_mean(input_tensor=minimum_square_distance_a_to_b, axis=-1) +
-                            tf.reduce_mean(input_tensor=minimum_square_distance_b_to_a, axis=-1))
-        return setwise_distance
+    setwise_distance = (tf.reduce_mean(input_tensor=minimum_square_distance_a_to_b, axis=-1) +
+                        tf.reduce_mean(input_tensor=minimum_square_distance_b_to_a, axis=-1))
+    return setwise_distance
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@ import tensorflow_probability as tfp
 
 tfd = tfp.distributions
 
+
 class RandomPointSet:
     def __init__(self, pad_value):
         self.element_size = 2

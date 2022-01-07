@@ -67,7 +67,7 @@ def scaled_dot_product_attention(q, k, v, mask):
 
     matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., seq_len_q, seq_len_k)
 
-    # scale matmul_qk
+    # scale matmul_qk to stabilise gradients
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
@@ -105,9 +105,9 @@ class TransformerLayer(tf.keras.layers.Layer):
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
-    def call(self, x, y, mask):
-        attn_output, _ = self.mha(x, y, y, mask)  # (batch_size, input_seq_len, d_model)
-        out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
+    def call(self, q, k, mask):
+        attn_output, _ = self.mha(q, k, k, mask)  # (batch_size, input_seq_len, d_model)
+        out1 = self.layernorm1(q + attn_output)  # (batch_size, input_seq_len, d_model)
 
         ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
         out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
@@ -127,3 +127,55 @@ class PoolingMultiheadAttention(tf.keras.layers.Layer):
         s = tf.tile(s, [b, 1, 1])  # shape [b, k, d]
 
         return self.mab(s, x, mask)
+
+
+class PICASO(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_seed_vectors, num_heads):
+        super(PICASO, self).__init__()
+        self.mab = TransformerLayer(d_model, num_heads)      #shared parameters
+        self.seed_vectors = tf.Variable(tf.initializers.GlorotUniform()(shape=(1, num_seed_vectors, d_model)))
+
+    def call(self, x, mask):
+        b = tf.shape(x)[0]
+        s = self.seed_vectors
+        s = tf.tile(s, [b, 1, 1])  # shape [b, k, d]
+
+        S_prime = self.mab(s, x, mask)
+        S_prime2 = self.mab(S_prime, x, mask)
+        S_prime3 = self.mab(S_prime2, x, mask)
+
+        return S_prime3
+
+
+class GeneralisedPICASO(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_seed_vectors, num_heads):
+        super(GeneralisedPICASO, self).__init__()
+        self.seed_vectors = tf.Variable(tf.initializers.GlorotUniform()(shape=(1, num_seed_vectors, d_model)))
+
+        self.mab = TransformerLayer(d_model, num_heads)
+        self.mab0 = TransformerLayer(d_model, num_heads)
+        self.mab1 = TransformerLayer(d_model, num_heads)
+        self.mab2 = TransformerLayer(d_model, num_heads)
+        self.mab3 = TransformerLayer(d_model, num_heads)
+        self.mab4 = TransformerLayer(d_model, num_heads)
+        self.mab5 = TransformerLayer(d_model, num_heads)
+
+
+    def call(self, x, mask):
+        b = tf.shape(x)[0]
+        s = self.seed_vectors
+        s = tf.tile(s, [b, 1, 1])  # shape [b, k, d]
+
+        X_mask = tf.zeros((b, 1, 1, 1), x.dtype)
+
+        H = self.mab(s, x, mask)
+        X_prime = self.mab0(x, H, X_mask)
+
+        H_prime = self.mab1(H, X_prime, mask)
+        X_prime2 = self.mab2(X_prime, H_prime, X_mask)
+
+        H_prime2 = self.mab3(H_prime, X_prime2, mask)
+        X_prime3 = self.mab4(X_prime2, H_prime2, X_mask)
+
+        S_prime = self.mab5(H_prime2, X_prime3, mask)
+        return S_prime

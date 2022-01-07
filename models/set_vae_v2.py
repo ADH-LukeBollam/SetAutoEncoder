@@ -1,9 +1,9 @@
 import tensorflow as tf
 
-from models.deterministic_set_prior import DeterministicSetPrior
+from models.linear_set_prior import DeterministicSetPrior
 from models.stochastic_set_prior import StochasticSetPrior
 from models.size_predictor import SizePredictor
-from models.transformer_layers import TransformerLayer, PoolingMultiheadAttention
+from models.transformer_layers import TransformerLayer, PoolingMultiheadAttention, PICASO, GeneralisedPICASO
 import tensorflow_probability as tfp
 
 tfd = tfp.distributions
@@ -34,7 +34,7 @@ class SetEncoder(tf.keras.layers.Layer):
 
         self.num_layers = num_layers
         self.transformer = [TransformerLayer(trans_dim, num_heads) for _ in range(num_layers)]
-        self.transformer_pooling = PoolingMultiheadAttention(trans_dim, 1, 1)
+        self.transformer_pooling = PICASO(trans_dim, 1, 1)
 
         latent_dim = 64
         _latent_prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1), reinterpreted_batch_ndims=1)
@@ -64,15 +64,22 @@ class SetDecoder(tf.keras.layers.Layer):
         super(SetDecoder, self).__init__()
 
         self.num_layers = num_layers
+        self.initial_dense = tf.keras.layers.Conv1D(trans_dim, 1, kernel_initializer='glorot_uniform', use_bias=True)
+
         self.condition_dense = [tf.keras.layers.Conv1D(trans_dim, 1, kernel_initializer='glorot_uniform', use_bias=True) for _ in range(num_layers)]
         self.transformer = [TransformerLayer(trans_dim, num_heads) for _ in range(num_layers)]
+        self.transformer_pooling = PICASO(trans_dim, 1, 1)
 
     def call(self, initial_set, mask, conditioning):
-        x = initial_set
+        x = self.initial_dense(initial_set)
 
         for i in range(self.num_layers):
-            x = tf.concat([x, conditioning], 2)     # add conditioning vector to each point
+            current_pooled = self.transformer_pooling(x, mask)
+            current_pooled = tf.tile(current_pooled, [1, tf.shape(x)[1], 1])
+
+            x = tf.concat([x, conditioning, current_pooled], 2)     # add conditioning vector to each point
             x = self.condition_dense[i](x)                   # process set to transformer dimension
+
             x = self.transformer[i](x, x, mask)
 
         return x
@@ -94,9 +101,9 @@ class SetVariationalAutoEncoderV2(tf.keras.Model):
         self._decoder = SetDecoder(transformer_layers, transformer_dim, transformer_num_heads)
 
         # initialise the output to predict points at the center of our canvas
-        self._set_prediction_mean = tf.keras.layers.Conv1D(num_element_features, 1, kernel_initializer='zeros',
-                                                           bias_initializer=tf.keras.initializers.constant(0.5),
-                                                           use_bias=True)
+        self._set_prediction_mean = tf.keras.layers.Conv1D(num_element_features, 1, use_bias=True,
+                                                           kernel_initializer='zeros',
+                                                           bias_initializer=tf.keras.initializers.constant(0.5))
 
         self._size_predictor = SizePredictor(size_pred_width, max_set_size)
 

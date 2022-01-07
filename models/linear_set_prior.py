@@ -1,11 +1,5 @@
 import tensorflow as tf
-import tensorflow_probability as tfp
 import matplotlib.pyplot as plt
-
-tfpl = tfp.layers
-tfd = tfp.distributions
-tfkl = tf.keras.layers
-tfb = tfp.bijectors
 
 
 class DeterministicSetPrior(tf.keras.Model):
